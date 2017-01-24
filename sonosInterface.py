@@ -1,5 +1,7 @@
 import curses
 import time
+import threading
+from __builtin__ import True
 
 class zone:
 	def __init__ (self, parent, zoneName, height, width, y, x, volume, inGroup, mute):
@@ -211,55 +213,26 @@ class globalControls:
 			self.drawStartRadio()
 			self.win.refresh()
 		
+def input_dummy():
+	print("Test\n")
+	time.sleep(2)
 
-def main(stdscr):
-	# Parameters
-	DBG = True # Print debug statements
-	title = "Poor man's Sonos Controller" # Application name
-	# Size of each zone subwindow
-	height = 10; 
-	width = 15
-	# Offset for the zone subwindows
-	vOffset = 3
-	hOffset = 2
-	vPos = vOffset
-	hPos = hOffset
-	# Default volume to display
-	volume = 50
+def input_light(stdscr):
+	# Loop over time, waiting for key presses to trigger actions
+	while True:
+		# Get key
+		k = stdscr.getch()
 
-	# Clear screen
-	stdscr.clear()
-	# Do no display the blinking cursor
-	curses.curs_set(0)
+		if DBG:
+			# Display the character pressed
+			stdscr.addstr(25, hOffset, "Key pressed: <{}>                    ".format(k))
+			stdscr.refresh()
+			
+		if k == ord('q'):
+			# Quit application
+			break
 
-	# Display the application title on the first line
-	stdscr.addstr(0, hOffset, title, curses.A_UNDERLINE)
-
-	# Create a zone for each zone, plus a group zone
-	zoneNames = ["Group", "Kitchen", "Living Room", "Office", "Bathroom", "Bedroom"]
-	zones = []
-	zoneByName = {}
-
-	for zoneName in zoneNames:
-		zones.append(zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False))
-		zoneByName[zoneName] = zones[-1]
-		hPos += width
-
-	# The first zone will be active at the beginning
-	activeZoneIndex = 0
-	zones[activeZoneIndex].toggleActive()
-
-
-	# Global controls
-	globCtrlsvOffset = vOffset + height
-	globCtrlshOffset = hOffset
-	globCtrlsHeight = 8
-	globCtrlsWidth = 50
-
-	globCtrls = globalControls(stdscr, globCtrlsHeight, globCtrlsWidth, globCtrlsvOffset, globCtrlshOffset)
-
-	stdscr.refresh()
-
+def input(stdscr, hOffset, zones, activeZoneIndex, globCtrls, zoneByName, DBG):
 	# Loop over time, waiting for key presses to trigger actions
 	while True:
 		# Get key
@@ -322,6 +295,179 @@ def main(stdscr):
 			# Display help message !!! NOT WORKING !!!
 			stdscr.addstr(27, hOffset, "Usage: ")
 			stdscr.refresh()
+	
+class State:
+	def __init__(self, state = True):
+		self.state = state
+		
+	def isOn(self):
+		return self.state
+	
+	def set(self, state):
+		self.state = state
+		
+def output(zones, zoneByName, names, speakers, running):
+
+	while running.isOn():
+		# Test
+		for zone in zones:
+			zoneName = zone.zoneName
+			
+			try:
+				volume = speakers[zoneName].volume
+				
+				zone.volume = volume
+				zone.drawVolume()
+				zone.win.refresh()
+			except:
+				pass
+			
+		time.sleep(5)
+
+
+def main(stdscr):
+	# Parameters
+	DBG = True # Print debug statements
+	title = "Poor man's Sonos Controller" # Application name
+	# Size of each zone subwindow
+	height = 10; 
+	width = 15
+	# Offset for the zone subwindows
+	vOffset = 3
+	hOffset = 2
+	vPos = vOffset
+	hPos = hOffset
+	# Default volume to display
+	volume = 50
+
+	# Clear screen
+	stdscr.clear()
+	# Do no display the blinking cursor
+	curses.curs_set(0)
+
+	# Display the application title on the first line
+	stdscr.addstr(0, hOffset, title, curses.A_UNDERLINE)
+
+	# Create a zone for each zone, plus a group zone
+	zoneNames = ["Group", "Kitchen", "Living Room", "Office", "Bathroom", "Bedroom"]
+	zones = []
+	zoneByName = {}
+
+	for zoneName in zoneNames:
+		zones.append(zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False))
+		zoneByName[zoneName] = zones[-1]
+		hPos += width
+
+	# The first zone will be active at the beginning
+	activeZoneIndex = 0
+	zones[activeZoneIndex].toggleActive()
+
+
+	# Global controls
+	globCtrlsvOffset = vOffset + height
+	globCtrlshOffset = hOffset
+	globCtrlsHeight = 8
+	globCtrlsWidth = 50
+
+	globCtrls = globalControls(stdscr, globCtrlsHeight, globCtrlsWidth, globCtrlsvOffset, globCtrlshOffset)
+
+	stdscr.refresh()
+
+ 	## Test
+ 	#k = stdscr.getch()
+ 	
+ 	# Prepare info about sonos speakers
+ 	import soco
+
+	list_sonos = list(soco.discover())
+
+	speakers = {}
+	names = []
+
+ 	for speaker in list_sonos:
+		name = speaker.get_speaker_info()['zone_name']
+		names.append(name)
+		speakers[name] = speaker
+ 	
+ 	# State indicator
+ 	running = State(True)
+ 	
+	#inputThread = threading.Thread(name='input', target=input, args=(stdscr, hOffset, zones, activeZoneIndex, globCtrls, zoneByName, DBG))
+	#inputThread = threading.Thread(name='input', target=input_light, args=(stdscr,))
+	#inputThread = threading.Thread(name='input', target=input_dummy)
+	outputThread = threading.Thread(name='output', target=output, args=(zones, zoneByName, names, speakers, running))
+
+	#inputThread.start()
+	outputThread.start()
+
+	
+	input(stdscr, hOffset, zones, activeZoneIndex, globCtrls, zoneByName, DBG)
+	
+	# Indicate that the program is stopping
+	running.set(False)
+	
+# 	# Loop over time, waiting for key presses to trigger actions
+# 	while True:
+# 		# Get key
+# 		k = stdscr.getch()
+# 
+# 		if DBG:
+# 			# Display the character pressed
+# 			stdscr.addstr(25, hOffset, "Key pressed: <{}>                    ".format(k))
+# 			stdscr.refresh()
+# 			
+# 		if k == ord('q'):
+# 			# Quit application
+# 			break
+# 		elif k == ord('m'):
+# 			# Mute the current (active) zone
+# 			zones[activeZoneIndex].toggleMute()
+# 		elif k == ord('g'):
+# 			# Toggle group membership of the current zone
+# 			zones[activeZoneIndex].toggleInGroup()
+# 		elif k == ord('d'):
+# 			# Disable zone (testing purposes)
+# 			zones[activeZoneIndex].disableZone()
+# 		elif k == ord('e'):
+# 			# Enable zone (testing purposes)
+# 			zones[activeZoneIndex].enableZone()
+# 		elif k == ord('p'):
+# 			# Start or pause playback in the group
+# 			globCtrls.pressPlayPause()
+# 		elif k == ord('r'):
+# 			# Group all zones, set volumes and play the preselected radio station
+# 			zoneByName["Group"].resetParams(None, False)
+# 			zoneByName["Kitchen"].resetParams(45, False, True)
+# 			zoneByName["Living Room"].resetParams(40, False, True)
+# 			zoneByName["Office"].resetParams(30, True, True)
+# 			zoneByName["Bathroom"].resetParams(50, True, True)
+# 			zoneByName["Bedroom"].resetParams(20, True, True)
+# 
+# 			globCtrls.pressStartRadio()
+# 		elif k == curses.KEY_UP or k == ord('+'):
+# 			# Increase the volume for the current zone
+# 			zones[activeZoneIndex].incrVolume()
+# 		elif k == curses.KEY_DOWN or k == ord('-'):
+# 			# Decrease the volume for the current zone
+# 			zones[activeZoneIndex].decrVolume()
+# 		elif k == ord("\t") or k == curses.KEY_RIGHT:
+# 			# Cycle through zones
+# 			zones[activeZoneIndex].toggleActive()
+# 			activeZoneIndex += 1
+# 			if activeZoneIndex >= len(zones):
+# 				activeZoneIndex = 0
+# 			zones[activeZoneIndex].toggleActive()
+# 		elif k == curses.KEY_BTAB or curses.KEY_LEFT:
+# 			# Cycle through zones (backwards)
+# 			zones[activeZoneIndex].toggleActive()
+# 			activeZoneIndex -= 1
+# 			if activeZoneIndex < 0:
+# 				activeZoneIndex = len(zones) - 1
+# 			zones[activeZoneIndex].toggleActive()
+# 		elif k == ord('h'):
+# 			# Display help message !!! NOT WORKING !!!
+# 			stdscr.addstr(27, hOffset, "Usage: ")
+# 			stdscr.refresh()
 
 
 # Start the curses application
