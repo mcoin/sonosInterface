@@ -1,6 +1,7 @@
 import curses
 import time
 import threading
+from collections import OrderedDict
 from __builtin__ import True
 
 class zone:
@@ -24,7 +25,10 @@ class zone:
 		# Usability parameters
 		self.volDelta = 5
 		self.minVolume = 0
-		self.maxVolume = 127
+		self.maxVolume = 100
+		# Pointers to other zones
+		self.prevZoneName = None
+		self.nextZoneName = None
 
 		self.drawWindow()
 
@@ -32,7 +36,7 @@ class zone:
 		self.win.addstr(self.vPosZoneName, self.hPosZoneName, self.zoneName, curses.A_STANDOUT if self.active else curses.A_NORMAL)
 
 	def drawVolume(self):
-		self.win.addstr(self.vPosVolume, self.hPosVolume, "Vol.: {}".format(self.volume))
+		self.win.addstr(self.vPosVolume, self.hPosVolume, "Vol.: {:3d}".format(self.volume))
 
 	def drawInGroup(self):
 		self.win.addstr(self.vPosInGroup, self.hPosInGroup, "In group", curses.A_BOLD if self.inGroup else curses.A_DIM)
@@ -95,10 +99,7 @@ class zone:
 		prevVolume = self.volume
 		self.volume += self.volDelta
 		if self.volume > self.maxVolume:
-			self.volume = self.maxVolume
-		#elif self.volume % self.volDelta != 0:
-		#	self.volume -= self.volume % self.volDelta
-			
+			self.volume = self.maxVolume			
 
 		if self.volume == prevVolume:
 			return
@@ -114,8 +115,6 @@ class zone:
 		self.volume -= self.volDelta
 		if self.volume < self.minVolume:
 			self.volume = self.minVolume
-		#elif self.volume % self.volDelta != 0:
-		#	self.volume += self.volume % self.volDelta
 
 		if self.volume == prevVolume:
 			return
@@ -147,6 +146,16 @@ class zone:
 
 		if redraw:
 			self.drawWindow()
+			
+	def setPrevNextZoneNames(self, prevZoneName, nextZoneName):
+		self.prevZoneName = prevZoneName
+		self.nextZoneName = nextZoneName
+		
+	def getPrevZoneName(self):
+		return self.prevZoneName
+
+	def getNextZoneName(self):
+		return self.nextZoneName
 
 class globalControls:
 	def __init__(self, parent, height, width, y, x):
@@ -213,26 +222,7 @@ class globalControls:
 			self.drawStartRadio()
 			self.win.refresh()
 		
-def input_dummy():
-	print("Test\n")
-	time.sleep(2)
-
-def input_light(stdscr):
-	# Loop over time, waiting for key presses to trigger actions
-	while True:
-		# Get key
-		k = stdscr.getch()
-
-		if DBG:
-			# Display the character pressed
-			stdscr.addstr(25, hOffset, "Key pressed: <{}>                    ".format(k))
-			stdscr.refresh()
-			
-		if k == ord('q'):
-			# Quit application
-			break
-
-def input(stdscr, hOffset, zones, activeZoneIndex, globCtrls, zoneByName, DBG):
+def input(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG):
 	# Loop over time, waiting for key presses to trigger actions
 	while True:
 		# Get key
@@ -248,49 +238,45 @@ def input(stdscr, hOffset, zones, activeZoneIndex, globCtrls, zoneByName, DBG):
 			break
 		elif k == ord('m'):
 			# Mute the current (active) zone
-			zones[activeZoneIndex].toggleMute()
+			zones[activeZoneName].toggleMute()
 		elif k == ord('g'):
 			# Toggle group membership of the current zone
-			zones[activeZoneIndex].toggleInGroup()
+			zones[activeZoneName].toggleInGroup()
 		elif k == ord('d'):
 			# Disable zone (testing purposes)
-			zones[activeZoneIndex].disableZone()
+			zones[activeZoneName].disableZone()
 		elif k == ord('e'):
 			# Enable zone (testing purposes)
-			zones[activeZoneIndex].enableZone()
+			zones[activeZoneName].enableZone()
 		elif k == ord('p'):
 			# Start or pause playback in the group
 			globCtrls.pressPlayPause()
 		elif k == ord('r'):
 			# Group all zones, set volumes and play the preselected radio station
-			zoneByName["Group"].resetParams(None, False)
-			zoneByName["Kitchen"].resetParams(45, False, True)
-			zoneByName["Living Room"].resetParams(40, False, True)
-			zoneByName["Office"].resetParams(30, True, True)
-			zoneByName["Bathroom"].resetParams(50, True, True)
-			zoneByName["Bedroom"].resetParams(20, True, True)
+			zones["Group"].resetParams(None, False)
+			zones["Kitchen"].resetParams(45, False, True)
+			zones["Living Room"].resetParams(40, False, True)
+			zones["Office"].resetParams(30, True, True)
+			zones["Bathroom"].resetParams(50, True, True)
+			zones["Bedroom"].resetParams(20, True, True)
 
 			globCtrls.pressStartRadio()
 		elif k == curses.KEY_UP or k == ord('+'):
 			# Increase the volume for the current zone
-			zones[activeZoneIndex].incrVolume()
+			zones[activeZoneName].incrVolume()
 		elif k == curses.KEY_DOWN or k == ord('-'):
 			# Decrease the volume for the current zone
-			zones[activeZoneIndex].decrVolume()
+			zones[activeZoneName].decrVolume()
 		elif k == ord("\t") or k == curses.KEY_RIGHT:
 			# Cycle through zones
-			zones[activeZoneIndex].toggleActive()
-			activeZoneIndex += 1
-			if activeZoneIndex >= len(zones):
-				activeZoneIndex = 0
-			zones[activeZoneIndex].toggleActive()
+			zones[activeZoneName].toggleActive()
+			activeZoneName = zones[activeZoneName].getNextZoneName()
+			zones[activeZoneName].toggleActive()
 		elif k == curses.KEY_BTAB or curses.KEY_LEFT:
 			# Cycle through zones (backwards)
-			zones[activeZoneIndex].toggleActive()
-			activeZoneIndex -= 1
-			if activeZoneIndex < 0:
-				activeZoneIndex = len(zones) - 1
-			zones[activeZoneIndex].toggleActive()
+			zones[activeZoneName].toggleActive()
+			activeZoneName = zones[activeZoneName].getPrevZoneName()
+			zones[activeZoneName].toggleActive()
 		elif k == ord('h'):
 			# Display help message !!! NOT WORKING !!!
 			stdscr.addstr(27, hOffset, "Usage: ")
@@ -306,22 +292,50 @@ class State:
 	def set(self, state):
 		self.state = state
 		
-def output(zones, zoneByName, names, speakers, running):
+def output(zones, speakers, running):
 
 	while running.isOn():
-		# Test
-		for zone in zones:
-			zoneName = zone.zoneName
-			
+		groupDef = None
+		try:
+			groupDef = speakers['Kitchen'].group.members
+		except:
+			pass
+		
+		for zoneName, zone in zones.items():
+			refreshZone = False
 			try:
+				origVolume = zone.volume
 				volume = speakers[zoneName].volume
-				
-				zone.volume = volume
-				zone.drawVolume()
-				zone.win.refresh()
+				if volume != origVolume:
+					zone.volume = volume
+					zone.drawVolume()
+					refreshZone = True
 			except:
 				pass
 			
+			try:
+				origMute = zone.mute
+				mute = speakers[zoneName].mute
+				if mute != origMute:
+					zone.mute = mute
+					zone.drawMute()
+					refreshZone = True
+			except:
+				pass
+			
+			try:
+				origInGroup = zone.inGroup
+				inGroup = len(groupDef) > 1 and speakers[zoneName] in groupDef
+				if inGroup != origInGroup:
+					zone.inGroup = inGroup
+					zone.drawInGroup()
+					refreshZone = True
+			except:
+				pass
+
+			if refreshZone:
+				zone.win.refresh()
+
 		time.sleep(5)
 
 
@@ -350,17 +364,22 @@ def main(stdscr):
 
 	# Create a zone for each zone, plus a group zone
 	zoneNames = ["Group", "Kitchen", "Living Room", "Office", "Bathroom", "Bedroom"]
-	zones = []
-	zoneByName = {}
+	zones = OrderedDict()
 
+	zoneNameIndex = 0 
 	for zoneName in zoneNames:
-		zones.append(zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False))
-		zoneByName[zoneName] = zones[-1]
+		zones[zoneName] = zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False)
+		
+		prevZoneNameIndex = zoneNameIndex - 1
+		nextZoneNameIndex = zoneNameIndex + 1 if zoneNameIndex < len(zoneNames) - 1 else zoneNameIndex + 1 - len(zoneNames)
+		
+		zones[zoneName].setPrevNextZoneNames(zoneNames[prevZoneNameIndex], zoneNames[nextZoneNameIndex])
 		hPos += width
+		zoneNameIndex += 1
 
 	# The first zone will be active at the beginning
-	activeZoneIndex = 0
-	zones[activeZoneIndex].toggleActive()
+	activeZoneName = zoneNames[0]
+	zones[activeZoneName].toggleActive()
 
 
 	# Global controls
@@ -373,8 +392,6 @@ def main(stdscr):
 
 	stdscr.refresh()
 
- 	## Test
- 	#k = stdscr.getch()
  	
  	# Prepare info about sonos speakers
  	import soco
@@ -392,82 +409,19 @@ def main(stdscr):
  	# State indicator
  	running = State(True)
  	
-	#inputThread = threading.Thread(name='input', target=input, args=(stdscr, hOffset, zones, activeZoneIndex, globCtrls, zoneByName, DBG))
-	#inputThread = threading.Thread(name='input', target=input_light, args=(stdscr,))
-	#inputThread = threading.Thread(name='input', target=input_dummy)
-	outputThread = threading.Thread(name='output', target=output, args=(zones, zoneByName, names, speakers, running))
+	#inputThread = threading.Thread(name='input', target=input, args=(stdscr, hOffset, zones, activeZoneNameIndex, globCtrls, zoneByName, DBG))
+	outputThread = threading.Thread(name='output', target=output, args=(zones, speakers, running))
 
 	#inputThread.start()
-	outputThread.start()
+ 	outputThread.start()
 
-	
-	input(stdscr, hOffset, zones, activeZoneIndex, globCtrls, zoneByName, DBG)
-	
-	# Indicate that the program is stopping
-	running.set(False)
-	
-# 	# Loop over time, waiting for key presses to trigger actions
-# 	while True:
-# 		# Get key
-# 		k = stdscr.getch()
-# 
-# 		if DBG:
-# 			# Display the character pressed
-# 			stdscr.addstr(25, hOffset, "Key pressed: <{}>                    ".format(k))
-# 			stdscr.refresh()
-# 			
-# 		if k == ord('q'):
-# 			# Quit application
-# 			break
-# 		elif k == ord('m'):
-# 			# Mute the current (active) zone
-# 			zones[activeZoneIndex].toggleMute()
-# 		elif k == ord('g'):
-# 			# Toggle group membership of the current zone
-# 			zones[activeZoneIndex].toggleInGroup()
-# 		elif k == ord('d'):
-# 			# Disable zone (testing purposes)
-# 			zones[activeZoneIndex].disableZone()
-# 		elif k == ord('e'):
-# 			# Enable zone (testing purposes)
-# 			zones[activeZoneIndex].enableZone()
-# 		elif k == ord('p'):
-# 			# Start or pause playback in the group
-# 			globCtrls.pressPlayPause()
-# 		elif k == ord('r'):
-# 			# Group all zones, set volumes and play the preselected radio station
-# 			zoneByName["Group"].resetParams(None, False)
-# 			zoneByName["Kitchen"].resetParams(45, False, True)
-# 			zoneByName["Living Room"].resetParams(40, False, True)
-# 			zoneByName["Office"].resetParams(30, True, True)
-# 			zoneByName["Bathroom"].resetParams(50, True, True)
-# 			zoneByName["Bedroom"].resetParams(20, True, True)
-# 
-# 			globCtrls.pressStartRadio()
-# 		elif k == curses.KEY_UP or k == ord('+'):
-# 			# Increase the volume for the current zone
-# 			zones[activeZoneIndex].incrVolume()
-# 		elif k == curses.KEY_DOWN or k == ord('-'):
-# 			# Decrease the volume for the current zone
-# 			zones[activeZoneIndex].decrVolume()
-# 		elif k == ord("\t") or k == curses.KEY_RIGHT:
-# 			# Cycle through zones
-# 			zones[activeZoneIndex].toggleActive()
-# 			activeZoneIndex += 1
-# 			if activeZoneIndex >= len(zones):
-# 				activeZoneIndex = 0
-# 			zones[activeZoneIndex].toggleActive()
-# 		elif k == curses.KEY_BTAB or curses.KEY_LEFT:
-# 			# Cycle through zones (backwards)
-# 			zones[activeZoneIndex].toggleActive()
-# 			activeZoneIndex -= 1
-# 			if activeZoneIndex < 0:
-# 				activeZoneIndex = len(zones) - 1
-# 			zones[activeZoneIndex].toggleActive()
-# 		elif k == ord('h'):
-# 			# Display help message !!! NOT WORKING !!!
-# 			stdscr.addstr(27, hOffset, "Usage: ")
-# 			stdscr.refresh()
+	try:
+		input(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG)
+	except:
+		pass
+	finally:
+		# Indicate that the program is stopping so that the slave process also stops
+		running.set(False)
 
 
 # Start the curses application
