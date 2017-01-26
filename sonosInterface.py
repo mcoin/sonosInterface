@@ -31,6 +31,11 @@ class zone:
 		# Pointers to other zones
 		self.prevZoneName = None
 		self.nextZoneName = None
+		# Triggers
+		self.triggerToggleMute = False
+		self.triggerToggleInGroup = False
+		self.triggerVolumeChange = 0
+		self.reflectChangesDirectly = False
 
 		self.drawWindow()
 
@@ -77,19 +82,25 @@ class zone:
 		if not self.enabled:
 			return
 
-		self.inGroup = not self.inGroup
+		if self.reflectChangesDirectly:
+			self.inGroup = not self.inGroup
 
-		self.drawInGroup()
-		self.win.refresh()
+			self.drawInGroup()
+			self.win.refresh()
+		else:
+			self.triggerToggleInGroup = not self.triggerToggleInGroup
 
 	def toggleMute(self):
 		if not self.enabled:
 			return
 
-		self.mute = not self.mute
-
-		self.drawMute()
-		self.win.refresh()
+		if self.reflectChangesDirectly:
+			self.mute = not self.mute
+	
+			self.drawMute()
+			self.win.refresh()
+		else:
+			self.triggerToggleMute = not self.triggerToggleMute
 
 	def toggleActive(self):
 		self.active = not self.active
@@ -101,31 +112,37 @@ class zone:
 		if not self.enabled:
 			return
 
-		prevVolume = self.volume
-		self.volume += self.volDelta
-		if self.volume > self.maxVolume:
-			self.volume = self.maxVolume			
-
-		if self.volume == prevVolume:
-			return
-
-		self.drawVolume()
-		self.win.refresh()
+		if self.reflectChangesDirectly:
+			prevVolume = self.volume
+			self.volume += self.volDelta
+			if self.volume > self.maxVolume:
+				self.volume = self.maxVolume			
+	
+			if self.volume == prevVolume:
+				return
+	
+			self.drawVolume()
+			self.win.refresh()
+		else:
+			self.triggerVolumeChange += self.volDelta
 
 	def decrVolume(self):
 		if not self.enabled:
 			return
 
-		prevVolume = self.volume
-		self.volume -= self.volDelta
-		if self.volume < self.minVolume:
-			self.volume = self.minVolume
-
-		if self.volume == prevVolume:
-			return
-
-		self.drawVolume()
-		self.win.refresh()
+		if self.reflectChangesDirectly:
+			prevVolume = self.volume
+			self.volume -= self.volDelta
+			if self.volume < self.minVolume:
+				self.volume = self.minVolume
+	
+			if self.volume == prevVolume:
+				return
+	
+			self.drawVolume()
+			self.win.refresh()
+		else:
+			self.triggerVolumeChange -= self.volDelta
 
 	def disableZone(self):
 		self.enabled = False
@@ -382,8 +399,87 @@ def readSonosValues(zones, speakers, running):
 			
 			zone.win.refresh()
 
-		time.sleep(5)
-# 		time.sleep(1)
+# 		time.sleep(5)
+		time.sleep(1)
+
+def changeSonosValues(zones, speakers, running):
+
+	init = True
+	
+	while running.isOn():
+# 		groupVolume = 0
+# 		groupNbZones = 0
+# 		groupNbMute = 0
+# 		groupChanges = False
+# 		if init:
+# 			groupChanges = True
+# 			init = False
+		groupDef = None
+		try:
+			groupDef = speakers['Kitchen'].group.members
+		except:
+			raise
+		
+		for zoneName, zone in zones.items():
+			# Treat group zone separately (if it exists)
+			if zoneName == 'Group':
+				continue
+			
+			refreshZone = False
+
+			if zone.triggerToggleInGroup:
+				if zone.inGroup:
+					speakers[zoneName].unjoin()
+				else:
+					if zoneName != 'Kitchen':
+						speakers[zoneName].join(speakers['Kitchen'])
+					
+				zone.triggerToggleInGroup = False
+				
+			if zone.triggerToggleMute:
+				if zone.mute:
+					speakers[zoneName].mute = False
+				else:
+					speakers[zoneName].mute = True
+					
+				zone.triggerToggleMute = False
+				
+			if zone.triggerVolumeChange != 0:
+				speakers[zoneName].volume += zone.triggerVolumeChange
+				
+				zone.triggerVolumeChange = 0
+				
+		#for zoneName, zone in zones.items():
+
+		# Group zone
+		zone = zones['Group']
+		if len(groupDef) > 1:
+			groupMembers = set()
+			for member in groupDef:
+				groupMembers.add(member.player_name)
+				
+			if zone.triggerToggleMute:
+				allMute = True
+				for zoneName, zone in zones.items():
+					if zoneName in groupMembers:
+						allMute = speakers[zoneName].mute
+						
+				for zoneName, zone in zones.items():
+					if zoneName in groupMembers:
+						speakers[zoneName].mute = not allMute
+				
+				zone.triggerToggleMute = False
+				
+			if zone.triggerVolumeChange != 0:
+				for zoneName, zone in zones.items():
+					if zoneName in groupMembers:
+						speakers[zoneName].volume += zone.triggerVolumeChange
+						
+				zone.triggerVolumeChange = 0
+			
+
+# 		time.sleep(5)
+		time.sleep(1)
 
 
 def main(stdscr):
@@ -457,9 +553,11 @@ def main(stdscr):
  	
 	#inputThread = threading.Thread(name='input', target=input, args=(stdscr, hOffset, zones, activeZoneNameIndex, globCtrls, zoneByName, DBG))
 	readSonosValuesThread = threading.Thread(name='readSonosValues', target=readSonosValues, args=(zones, speakers, running))
+	changeSonosValuesThread = threading.Thread(name='changeSonosValues', target=changeSonosValues, args=(zones, speakers, running))
 
 	#inputThread.start()
  	readSonosValuesThread.start()
+ 	changeSonosValuesThread.start()
 
 	try:
 		interface(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG)
