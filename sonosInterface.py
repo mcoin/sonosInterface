@@ -2,10 +2,11 @@ import curses
 import time
 import threading
 from collections import OrderedDict
+import soco
 from __builtin__ import True
 
 class zone:
-	def __init__ (self, parent, zoneName, height, width, y, x, volume, inGroup, mute):
+	def __init__ (self, parent, zoneName, height, width, y, x, volume, inGroup, mute, inGroupEnabled = True):
 		# Parameters
 		self.height = height
 		self.width = width
@@ -26,6 +27,7 @@ class zone:
 		self.volDelta = 5
 		self.minVolume = 0
 		self.maxVolume = 100
+		self.inGroupEnabled = inGroupEnabled
 		# Pointers to other zones
 		self.prevZoneName = None
 		self.nextZoneName = None
@@ -39,7 +41,10 @@ class zone:
 		self.win.addstr(self.vPosVolume, self.hPosVolume, "Vol.: {:3d}".format(self.volume))
 
 	def drawInGroup(self):
-		self.win.addstr(self.vPosInGroup, self.hPosInGroup, "In group", curses.A_BOLD if self.inGroup else curses.A_DIM)
+		string = "In group"
+		if not self.inGroupEnabled:
+			string = "        "	
+		self.win.addstr(self.vPosInGroup, self.hPosInGroup, string, curses.A_BOLD if self.inGroup else curses.A_DIM)
 
 	def drawMute(self):
 		self.win.addstr(self.vPosMute, self.hPosMute, "Mute", curses.A_BOLD if self.mute else curses.A_DIM)
@@ -222,7 +227,7 @@ class globalControls:
 			self.drawStartRadio()
 			self.win.refresh()
 		
-def input(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG):
+def interface(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG):
 	# Loop over time, waiting for key presses to trigger actions
 	while True:
 		# Get key
@@ -292,17 +297,43 @@ class State:
 	def set(self, state):
 		self.state = state
 		
-def output(zones, speakers, running):
+def readSonosValues(zones, speakers, running):
 
+	init = True
+	
 	while running.isOn():
+		groupVolume = 0
+		groupNbZones = 0
+		groupNbMute = 0
+		groupChanges = False
+		if init:
+			groupChanges = True
+			init = False
 		groupDef = None
 		try:
 			groupDef = speakers['Kitchen'].group.members
 		except:
-			pass
+			raise
 		
 		for zoneName, zone in zones.items():
+			# Treat group zone separately (if it exists)
+			if zoneName == 'Group':
+				continue
+			
 			refreshZone = False
+
+			try:
+				origInGroup = zone.inGroup
+				inGroup = len(groupDef) > 1 and speakers[zoneName] in groupDef
+				if inGroup != origInGroup:
+					zone.inGroup = inGroup
+					zone.drawInGroup()
+					refreshZone = True
+					if inGroup:
+						groupNbZones += 1
+			except:
+				raise
+
 			try:
 				origVolume = zone.volume
 				volume = speakers[zoneName].volume
@@ -310,8 +341,10 @@ def output(zones, speakers, running):
 					zone.volume = volume
 					zone.drawVolume()
 					refreshZone = True
+					if zone.inGroup:
+						groupVolume += volume
 			except:
-				pass
+				raise
 			
 			try:
 				origMute = zone.mute
@@ -320,23 +353,37 @@ def output(zones, speakers, running):
 					zone.mute = mute
 					zone.drawMute()
 					refreshZone = True
+					if zone.inGroup:
+						groupNbMute += 1
 			except:
-				pass
+				raise
 			
-			try:
-				origInGroup = zone.inGroup
-				inGroup = len(groupDef) > 1 and speakers[zoneName] in groupDef
-				if inGroup != origInGroup:
-					zone.inGroup = inGroup
-					zone.drawInGroup()
-					refreshZone = True
-			except:
-				pass
-
 			if refreshZone:
 				zone.win.refresh()
+				groupChanges = True
+				
+		#for zoneName, zone in zones.items():
+		
+		# Group zone
+		zone = zones['Group']
+		if groupChanges:
+# 			if groupNbZones == 0 and zone.enabled:
+# 				zone.disableZone()
+# 			elif groupNbZones > 0 and not zone.enabled:
+# 				zone.enableZone()
+			
+			if groupNbZones > 0:	
+				groupVolume = float(groupVolume)/float(groupNbZones)
+				zone.volume = int(groupVolume)
+				zone.drawVolume()
+				
+				zone.mute = groupNbMute == groupNbZones
+				zone.drawMute()
+			
+			zone.win.refresh()
 
 		time.sleep(5)
+# 		time.sleep(1)
 
 
 def main(stdscr):
@@ -368,7 +415,9 @@ def main(stdscr):
 
 	zoneNameIndex = 0 
 	for zoneName in zoneNames:
-		zones[zoneName] = zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False)
+		# Hide the "In group" parameter for the group zone
+		inGroupEnabled = True if zoneName != "Group" else False
+		zones[zoneName] = zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False, inGroupEnabled)
 		
 		prevZoneNameIndex = zoneNameIndex - 1
 		nextZoneNameIndex = zoneNameIndex + 1 if zoneNameIndex < len(zoneNames) - 1 else zoneNameIndex + 1 - len(zoneNames)
@@ -380,8 +429,7 @@ def main(stdscr):
 	# The first zone will be active at the beginning
 	activeZoneName = zoneNames[0]
 	zones[activeZoneName].toggleActive()
-
-
+	
 	# Global controls
 	globCtrlsvOffset = vOffset + height
 	globCtrlshOffset = hOffset
@@ -394,8 +442,6 @@ def main(stdscr):
 
  	
  	# Prepare info about sonos speakers
- 	import soco
-
 	list_sonos = list(soco.discover())
 
 	speakers = {}
@@ -410,13 +456,13 @@ def main(stdscr):
  	running = State(True)
  	
 	#inputThread = threading.Thread(name='input', target=input, args=(stdscr, hOffset, zones, activeZoneNameIndex, globCtrls, zoneByName, DBG))
-	outputThread = threading.Thread(name='output', target=output, args=(zones, speakers, running))
+	readSonosValuesThread = threading.Thread(name='readSonosValues', target=readSonosValues, args=(zones, speakers, running))
 
 	#inputThread.start()
- 	outputThread.start()
+ 	readSonosValuesThread.start()
 
 	try:
-		input(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG)
+		interface(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG)
 	except:
 		pass
 	finally:
