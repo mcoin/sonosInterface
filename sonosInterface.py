@@ -3,6 +3,9 @@ import time
 import threading
 from collections import OrderedDict
 import soco
+import logging
+import os
+
 from __builtin__ import True
 
 class zone:
@@ -244,9 +247,12 @@ class globalControls:
 			self.drawStartRadio()
 			self.win.refresh()
 		
-def interface(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG):
+def interface(stdscr, hOffset, zones, activeZoneName, globCtrls, sleeperChange, DBG):
 	# Loop over time, waiting for key presses to trigger actions
 	while True:
+		# Flag used to send changes immediately
+		sendChanges = False
+		
 		# Get key
 		k = stdscr.getch()
 
@@ -261,18 +267,23 @@ def interface(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG):
 		elif k == ord('m'):
 			# Mute the current (active) zone
 			zones[activeZoneName].toggleMute()
+			sendChanges = True
 		elif k == ord('g'):
 			# Toggle group membership of the current zone
 			zones[activeZoneName].toggleInGroup()
+			sendChanges = True
 		elif k == ord('d'):
 			# Disable zone (testing purposes)
 			zones[activeZoneName].disableZone()
+			sendChanges = True
 		elif k == ord('e'):
 			# Enable zone (testing purposes)
 			zones[activeZoneName].enableZone()
+			sendChanges = True
 		elif k == ord('p'):
 			# Start or pause playback in the group
 			globCtrls.pressPlayPause()
+			sendChanges = True
 		elif k == ord('r'):
 			# Group all zones, set volumes and play the preselected radio station
 			zones["Group"].resetParams(None, False)
@@ -283,206 +294,264 @@ def interface(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG):
 			zones["Bedroom"].resetParams(20, True, True)
 
 			globCtrls.pressStartRadio()
+			sendChanges = True
 		elif k == curses.KEY_UP or k == ord('+'):
 			# Increase the volume for the current zone
 			zones[activeZoneName].incrVolume()
+			sendChanges = True
 		elif k == curses.KEY_DOWN or k == ord('-'):
 			# Decrease the volume for the current zone
 			zones[activeZoneName].decrVolume()
+			sendChanges = True
+		elif k == ord('h'):
+			# Display help message !!! NOT WORKING !!!
+			stdscr.addstr(27, hOffset, "Usage: ")
+			stdscr.refresh()
+# 			stdscr.addstr(27, hOffset, "               ")
 		elif k == ord("\t") or k == curses.KEY_RIGHT:
 			# Cycle through zones
 			zones[activeZoneName].toggleActive()
 			activeZoneName = zones[activeZoneName].getNextZoneName()
 			zones[activeZoneName].toggleActive()
+			sendChanges = True
 		elif k == curses.KEY_BTAB or curses.KEY_LEFT:
 			# Cycle through zones (backwards)
 			zones[activeZoneName].toggleActive()
 			activeZoneName = zones[activeZoneName].getPrevZoneName()
 			zones[activeZoneName].toggleActive()
-		elif k == ord('h'):
-			# Display help message !!! NOT WORKING !!!
-			stdscr.addstr(27, hOffset, "Usage: ")
-			stdscr.refresh()
-	
-class State:
-	def __init__(self, state = True):
-		self.state = state
-		
-	def isOn(self):
-		return self.state
-	
-	def set(self, state):
-		self.state = state
-		
-def readSonosValues(zones, speakers, running):
+			sendChanges = True
 
-	init = True
-	
-	while running.isOn():
-		groupVolume = 0
-		groupNbZones = 0
-		groupNbMute = 0
-		groupChanges = False
-		if init:
-			groupChanges = True
-			init = False
-		groupDef = None
-		try:
-			groupDef = speakers['Kitchen'].group.members
-		except:
-			raise
-		
-		for zoneName, zone in zones.items():
-			# Treat group zone separately (if it exists)
-			if zoneName == 'Group':
-				continue
-			
-			refreshZone = False
+		if sendChanges:
+			with sleeperChange:
+				sleeperChange.notifyAll()
 
+class readSonosValues(threading.Thread):
+	def __init__(self, zones, speakers, stopper, sleeperRead):
+		super(readSonosValues, self).__init__()
+		self.zones = zones
+		self.speakers = speakers
+		self.stopper = stopper
+		self.sleeperRead = sleeperRead
+		
+	def run(self):
+		init = True
+		speakers = self.speakers
+		zones = self.zones
+		
+		while not self.stopper.is_set():
+			groupVolume = 0
+			groupNbZones = 0
+			groupNbMute = 0
+			groupChanges = False
+			if init:
+				groupChanges = True
+				init = False
+			groupDef = None
 			try:
-				origInGroup = zone.inGroup
-				inGroup = len(groupDef) > 1 and speakers[zoneName] in groupDef
-				if inGroup != origInGroup:
-					zone.inGroup = inGroup
-					zone.drawInGroup()
-					refreshZone = True
+				groupDef = speakers['Kitchen'].group.members
+			except:
+				raise
+	
+			logging.debug("Reading zone properties")
+			for zoneName, zone in zones.items():
+				logging.debug("  zone: %s", zoneName)
+				# Treat group zone separately (if it exists)
+				if zoneName == 'Group':
+					continue
+				
+				refreshZone = False
+	
+				try:
+					origInGroup = zone.inGroup
+					inGroup = len(groupDef) > 1 and speakers[zoneName] in groupDef
+					logging.debug("  zone: %s", zoneName)
+					if inGroup != origInGroup:
+						zone.inGroup = inGroup
+						zone.drawInGroup()
+						refreshZone = True
 					if inGroup:
 						groupNbZones += 1
-			except:
-				raise
-
-			try:
-				origVolume = zone.volume
-				volume = speakers[zoneName].volume
-				if volume != origVolume:
-					zone.volume = volume
-					zone.drawVolume()
-					refreshZone = True
-					if zone.inGroup:
-						groupVolume += volume
-			except:
-				raise
-			
-			try:
-				origMute = zone.mute
-				mute = speakers[zoneName].mute
-				if mute != origMute:
-					zone.mute = mute
-					zone.drawMute()
-					refreshZone = True
-					if zone.inGroup:
-						groupNbMute += 1
-			except:
-				raise
-			
-			if refreshZone:
-				zone.win.refresh()
-				groupChanges = True
-				
-		#for zoneName, zone in zones.items():
-		
-		# Group zone
-		zone = zones['Group']
-		if groupChanges:
-# 			if groupNbZones == 0 and zone.enabled:
-# 				zone.disableZone()
-# 			elif groupNbZones > 0 and not zone.enabled:
-# 				zone.enableZone()
-			
-			if groupNbZones > 0:	
-				groupVolume = float(groupVolume)/float(groupNbZones)
-				zone.volume = int(groupVolume)
-				zone.drawVolume()
-				
-				zone.mute = groupNbMute == groupNbZones
-				zone.drawMute()
-			
-			zone.win.refresh()
-
-# 		time.sleep(5)
-		time.sleep(1)
-
-def changeSonosValues(zones, speakers, running):
-
-	init = True
+				except:
+					raise
 	
-	while running.isOn():
-# 		groupVolume = 0
-# 		groupNbZones = 0
-# 		groupNbMute = 0
-# 		groupChanges = False
-# 		if init:
-# 			groupChanges = True
-# 			init = False
-		groupDef = None
-		try:
-			groupDef = speakers['Kitchen'].group.members
-		except:
-			raise
+				try:
+					origVolume = zone.volume
+					volume = speakers[zoneName].volume
+					if volume != origVolume:
+						zone.volume = volume
+						zone.drawVolume()
+						refreshZone = True
+					if zone.inGroup:
+						logging.debug("Calculating total volume in group zone; zone = %s (zone.volume = %f)", zoneName, zone.volume)
+						logging.debug("groupVolume = %f", groupVolume)
+						groupVolume += volume
+						logging.debug("groupVolume = %f", groupVolume)
+				except:
+					raise
+				
+				try:
+					origMute = zone.mute
+					mute = speakers[zoneName].mute
+					if mute != origMute:
+						zone.mute = mute
+						zone.drawMute()
+						refreshZone = True
+					if zone.inGroup and mute:
+						groupNbMute += 1
+				except:
+					raise
+				
+				if refreshZone:
+					zone.win.refresh()
+					groupChanges = True
+					
+			#for zoneName, zone in zones.items():
+			
+			# Group zone
+			zone = zones['Group']
+			logging.debug("Reading properties for group zone; groupChanges = %d", groupChanges)
+			if groupChanges:
+	 			if groupNbZones == 0 and zone.enabled:
+	  				zone.disableZone()
+	 			elif groupNbZones > 0 and not zone.enabled:
+	 				zone.enableZone()
+				
+				logging.debug("groupNbZones = %d", groupNbZones)
+				if groupNbZones > 0:
+					logging.debug("groupVolume = %f", groupVolume)
+					groupVolume = float(groupVolume)/float(groupNbZones)
+					logging.debug("zone.volume = %f", zone.volume)
+					zone.volume = int(groupVolume)
+					logging.debug("zone.volume = %f", zone.volume)
+					zone.drawVolume()
+					
+					logging.debug("groupNbMute = %d", groupNbMute)
+					zone.mute = groupNbMute == groupNbZones
+					zone.drawMute()
+				
+				zone.win.refresh()
+	
+	# 		time.sleep(5)
+#  			time.sleep(1)
+ 			with self.sleeperRead:
+ 				self.sleeperRead.wait(timeout = 5)
+			
+
+class changeSonosValues(threading.Thread):
+	def __init__(self, zones, speakers, stopper, sleeperChange, sleeperRead):
+		super(changeSonosValues, self).__init__()
+		self.zones = zones
+		self.speakers = speakers
+		self.stopper = stopper
+		self.sleeperRead = sleeperRead
+		self.sleeperChange = sleeperChange
 		
-		for zoneName, zone in zones.items():
-			# Treat group zone separately (if it exists)
-			if zoneName == 'Group':
-				continue
+	def run(self):
+		speakers = self.speakers
+		zones = self.zones
+				
+		while not self.stopper.is_set():
+			changes = False
+			groupDef = None
+			try:
+				groupDef = speakers['Kitchen'].group.members
+			except:
+				raise
 			
-			refreshZone = False
-
-			if zone.triggerToggleInGroup:
-				if zone.inGroup:
-					speakers[zoneName].unjoin()
-				else:
-					if zoneName != 'Kitchen':
-						speakers[zoneName].join(speakers['Kitchen'])
-					
-				zone.triggerToggleInGroup = False
+			for zoneName, zone in zones.items():
+				# Treat group zone separately (if it exists)
+				if zoneName == 'Group':
+					continue
 				
-			if zone.triggerToggleMute:
-				if zone.mute:
-					speakers[zoneName].mute = False
-				else:
-					speakers[zoneName].mute = True
-					
-				zone.triggerToggleMute = False
-				
-			if zone.triggerVolumeChange != 0:
-				speakers[zoneName].volume += zone.triggerVolumeChange
-				
-				zone.triggerVolumeChange = 0
-				
-		#for zoneName, zone in zones.items():
-
-		# Group zone
-		zone = zones['Group']
-		if len(groupDef) > 1:
-			groupMembers = set()
-			for member in groupDef:
-				groupMembers.add(member.player_name)
-				
-			if zone.triggerToggleMute:
-				allMute = True
-				for zoneName, zone in zones.items():
-					if zoneName in groupMembers:
-						allMute = speakers[zoneName].mute
+				refreshZone = False
+	
+				if zone.triggerToggleInGroup:
+					changes = True
+					if zone.inGroup:
+						speakers[zoneName].unjoin()
+					else:
+						if zoneName != 'Kitchen':
+							speakers[zoneName].join(speakers['Kitchen'])
 						
-				for zoneName, zone in zones.items():
-					if zoneName in groupMembers:
-						speakers[zoneName].mute = not allMute
-				
-				zone.triggerToggleMute = False
-				
-			if zone.triggerVolumeChange != 0:
-				for zoneName, zone in zones.items():
-					if zoneName in groupMembers:
-						speakers[zoneName].volume += zone.triggerVolumeChange
+					zone.triggerToggleInGroup = False
+					
+				if zone.triggerToggleMute:
+					changes = True
+					if zone.mute:
+						speakers[zoneName].mute = False
+					else:
+						speakers[zoneName].mute = True
 						
-				zone.triggerVolumeChange = 0
-			
+					zone.triggerToggleMute = False
+					
+				if zone.triggerVolumeChange != 0:
+					changes = True
+					speakers[zoneName].volume += zone.triggerVolumeChange
+					
+					zone.triggerVolumeChange = 0
+					
+			#for zoneName, zone in zones.items():
+	
+			# Group zone
+			zone = zones['Group']
+			if len(groupDef) > 1:
+				groupMembers = set()
+				for member in groupDef:
+					groupMembers.add(member.player_name)
+					
+				logging.debug("Setting properties for group zone; zone.triggerToggleMute = %d", zone.triggerToggleMute)
+				if zone.triggerToggleMute:
+					changes = True
+					zone.triggerToggleMute = False
+					try:
+						allMute = True
+						for zoneName in zones:
+							if zoneName in groupMembers:
+								allMute = allMute and speakers[zoneName].mute
+								
+						for zoneName, zone in zones.items():
+							if zoneName in groupMembers:
+								speakers[zoneName].mute = not allMute
+					except:
+						raise
+					
+				logging.debug("Setting properties for group zone; zone.triggerVolumeChange = %d", zone.triggerVolumeChange)	
+				if zone.triggerVolumeChange != 0:
+					changes = True
+					volumeChange = zone.triggerVolumeChange
+					zone.triggerVolumeChange = 0
+					logging.debug("Changing volume for group zone")
+					try:
+						for zoneName in zones:
+							logging.debug("Changing volume for group zone: zone %s", zoneName)
+							if zoneName in groupMembers:
+								logging.debug("Changing volume for group zone: vol. += %f", volumeChange)
+								speakers[zoneName].volume += volumeChange
+					except:
+						raise
+					logging.debug("Changing volume for group zone: Setting volume change back to 0")
+					
+			# Changes occurred: Tell the reading thread to update immediately
+			if changes:
+				with self.sleeperRead:
+					self.sleeperRead.notifyAll()
+				
+	# 		time.sleep(5)
+# 			time.sleep(1)
+			with self.sleeperChange:
+				self.sleeperChange.wait(timeout = 5)
 
-# 		time.sleep(5)
-		time.sleep(1)
 
-
-def main(stdscr):
+def sonosInterface(stdscr):
+	# Configure logging
+	try:
+		os.remove('sonosInterface.log')
+	except OSError:
+		pass
+	logging.basicConfig(filename='sonosInterface.log',level=logging.DEBUG)
+	logging.getLogger("requests").setLevel(logging.WARNING)
+	logging.getLogger("soco").setLevel(logging.WARNING)
+	
 	# Parameters
 	DBG = True # Print debug statements
 	title = "Poor man's Sonos Controller" # Application name
@@ -549,24 +618,40 @@ def main(stdscr):
 		speakers[name] = speaker
  	
  	# State indicator
- 	running = State(True)
- 	
+	stopper = threading.Event()
+	 		 
+	# Timer for threads
+	sleeperRead = threading.Condition()
+	sleeperChange = threading.Condition()
+	
 	#inputThread = threading.Thread(name='input', target=input, args=(stdscr, hOffset, zones, activeZoneNameIndex, globCtrls, zoneByName, DBG))
-	readSonosValuesThread = threading.Thread(name='readSonosValues', target=readSonosValues, args=(zones, speakers, running))
-	changeSonosValuesThread = threading.Thread(name='changeSonosValues', target=changeSonosValues, args=(zones, speakers, running))
+# 	readSonosValuesThread = threading.Thread(name='readSonosValues', target=readSonosValues, args=(zones, speakers, running))
+	readSonosValuesThread = readSonosValues(zones, speakers, stopper, sleeperRead)
+# 	changeSonosValuesThread = threading.Thread(name='changeSonosValues', target=changeSonosValues, args=(zones, speakers, running))
+	changeSonosValuesThread = changeSonosValues(zones, speakers, stopper, sleeperChange, sleeperRead)
 
+	
 	#inputThread.start()
+	logging.debug("Starting readSonosValuesThread thread")
  	readSonosValuesThread.start()
+	logging.debug("Starting changeSonosValuesThread thread")
  	changeSonosValuesThread.start()
 
 	try:
-		interface(stdscr, hOffset, zones, activeZoneName, globCtrls, DBG)
+		logging.debug("Starting curses interface")
+		interface(stdscr, hOffset, zones, activeZoneName, globCtrls, sleeperChange, DBG)
 	except:
 		pass
 	finally:
 		# Indicate that the program is stopping so that the slave process also stops
-		running.set(False)
+		stopper.set()
+		# Cancel timers in the threads
+		with sleeperRead:
+			sleeperRead.notifyAll()
+		with sleeperChange:
+			sleeperChange.notifyAll()
 
 
-# Start the curses application
-curses.wrapper(main)
+if __name__ == '__main__':
+	# Start the curses application
+	curses.wrapper(sonosInterface)
