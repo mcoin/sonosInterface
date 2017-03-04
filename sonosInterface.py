@@ -9,7 +9,7 @@ import os
 from __builtin__ import True
 
 class zone:
-	def __init__ (self, parent, zoneName, height, width, y, x, volume, inGroup, mute, inGroupEnabled = True):
+	def __init__ (self, parent, zoneName, height, width, y, x, volume, inGroup, mute, inGroupEnabled = True, cursesInterfaceActive = False):
 		# Parameters
 		self.height = height
 		self.width = width
@@ -19,8 +19,10 @@ class zone:
 		self.volume = volume
 		self.inGroup = inGroup
 		self.mute = mute
-		self.win = parent.subwin(self.height, self.width, self.y, self.x)
-		self.win.box()
+		self.cursesInterfaceActive = cursesInterfaceActive
+		if self.cursesInterfaceActive:
+			self.win = parent.subwin(self.height, self.width, self.y, self.x)
+			self.win.box()
 		self.active = False
 		self.enabled = True
 		# UI details
@@ -40,24 +42,108 @@ class zone:
 		self.triggerVolumeChange = 0
 		self.reflectChangesDirectly = False
 
-		self.drawWindow()
+		if self.cursesInterfaceActive:
+			self.drawWindow()
 
+	def printChanges(self, item, value, oldValue = 0):
+		DBG = True
+# 		map = {
+# 			'Group': {'Mute': 'a', 'InGroup': 'b'},
+# 			'Kitchen': {'Mute': 'c', 'InGroup': 'd'}
+# 			}
+		map = {
+			'Mute': {
+					'Group': 'a', 
+					'Kitchen': 'b',
+					'Living Room': 'c',
+					'Office': 'd',
+					'Bathroom': 'e',
+					'Bedroom': 'f'
+		},
+			'InGroup': {
+					'Kitchen': 'g',
+					'Living Room': 'h',
+					'Office': 'i',
+					'Bathroom': 'j',
+					'Bedroom': 'k'
+		},
+			'IncrVol': {
+					'Group': 'l', 
+					'Kitchen': 'm',
+					'Living Room': 'n',
+					'Office': 'o',
+					'Bathroom': 'p',
+					'Bedroom': 'q'
+		},
+			'DecrVol': {
+					'Group': 'r', 
+					'Kitchen': 's',
+					'Living Room': 't',
+					'Office': 'u',
+					'Bathroom': 'v',
+					'Bedroom': 'w'
+		},
+			}
+			
+		
+		if self.cursesInterfaceActive:
+			return
+		
+		try:
+			codes = ""
+			count = 1
+			if item == "Volume":
+				count = self.volume - oldValue
+				print("Vol: %d OrigVol: %d count: %d" % (self.volume, oldValue, count))
+				if count >= 0:
+					item = 'IncrVol'
+				else:
+					count *= -1
+					item = 'DecrVol'
+			for i in range(count):
+				codes += map[item][self.zoneName]
+		except:
+			codes = "?"
+			
+		if DBG:
+			print("Zone name: %s - %s: %d [codes: '%s']" % (self.zoneName, item, value, codes))
+		else:
+			print codes
+		
+	def refresh(self):
+		if self.cursesInterfaceActive:
+			self.win.refresh()
+		
 	def drawZoneName(self):
-		self.win.addstr(self.vPosZoneName, self.hPosZoneName, self.zoneName, curses.A_STANDOUT if self.active else curses.A_NORMAL)
+		if self.cursesInterfaceActive:
+			self.win.addstr(self.vPosZoneName, self.hPosZoneName, self.zoneName, curses.A_STANDOUT if self.active else curses.A_NORMAL)
 
-	def drawVolume(self):
-		self.win.addstr(self.vPosVolume, self.hPosVolume, "Vol.: {:3d}".format(self.volume))
+	def drawVolume(self, oldValue = 0):
+		self.printChanges("Volume", self.volume, oldValue)
+		if self.cursesInterfaceActive:
+			self.win.addstr(self.vPosVolume, self.hPosVolume, "Vol.: {:3d}".format(self.volume))
 
 	def drawInGroup(self):
+		self.printChanges("InGroup", self.inGroup)
+		if not self.cursesInterfaceActive:
+			return
+		
 		string = "In group"
 		if not self.inGroupEnabled:
 			string = "        "	
 		self.win.addstr(self.vPosInGroup, self.hPosInGroup, string, curses.A_BOLD if self.inGroup else curses.A_DIM)
 
 	def drawMute(self):
+		self.printChanges("Mute", self.mute)
+		if not self.cursesInterfaceActive:
+			return
+		
 		self.win.addstr(self.vPosMute, self.hPosMute, "Mute", curses.A_BOLD if self.mute else curses.A_DIM)
 
 	def drawWindow(self):
+		if not self.cursesInterfaceActive:
+			return
+		
 		vPos = 0
 
 		vPos += self.vOffset
@@ -88,28 +174,32 @@ class zone:
 		if self.reflectChangesDirectly:
 			self.inGroup = not self.inGroup
 
-			self.drawInGroup()
-			self.win.refresh()
+			if self.cursesInterfaceActive:
+				self.drawInGroup()
+				self.win.refresh()
 		else:
 			self.triggerToggleInGroup = not self.triggerToggleInGroup
 
 	def toggleMute(self):
+		print("zone - toggleMute")
 		if not self.enabled:
 			return
 
 		if self.reflectChangesDirectly:
 			self.mute = not self.mute
 	
-			self.drawMute()
-			self.win.refresh()
+			if self.cursesInterfaceActive:
+				self.drawMute()
+				self.win.refresh()
 		else:
 			self.triggerToggleMute = not self.triggerToggleMute
 
 	def toggleActive(self):
 		self.active = not self.active
 
-		self.drawZoneName()
-		self.win.refresh()
+		if self.cursesInterfaceActive:
+			self.drawZoneName()
+			self.win.refresh()
 
 	def incrVolume(self):
 		if not self.enabled:
@@ -124,8 +214,9 @@ class zone:
 			if self.volume == prevVolume:
 				return
 	
-			self.drawVolume()
-			self.win.refresh()
+			if self.cursesInterfaceActive:
+				self.drawVolume()
+				self.win.refresh()
 		else:
 			self.triggerVolumeChange += self.volDelta
 
@@ -142,20 +233,23 @@ class zone:
 			if self.volume == prevVolume:
 				return
 	
-			self.drawVolume()
-			self.win.refresh()
+			if self.cursesInterfaceActive:
+				self.drawVolume()
+				self.win.refresh()
 		else:
 			self.triggerVolumeChange -= self.volDelta
 
 	def disableZone(self):
 		self.enabled = False
-		self.win.bkgd('/')
-		self.drawWindow()
+		if self.cursesInterfaceActive:
+			self.win.bkgd('/')
+			self.drawWindow()
 
 	def enableZone(self):
 		self.enabled = True
-		self.win.bkgd(' ')
-		self.drawWindow()
+		if self.cursesInterfaceActive:
+			self.win.bkgd(' ')
+			self.drawWindow()
 
 	def resetParams(self, volume = None, mute = None, inGroup = None):
 		redraw = False
@@ -169,7 +263,7 @@ class zone:
 			self.inGroup = inGroup
 			redraw = True
 
-		if redraw:
+		if redraw and self.cursesInterfaceActive:
 			self.drawWindow()
 			
 	def setPrevNextZoneNames(self, prevZoneName, nextZoneName):
@@ -183,32 +277,40 @@ class zone:
 		return self.nextZoneName
 
 class globalControls:
-	def __init__(self, parent, height, width, y, x):
+	def __init__(self, parent, height, width, y, x, cursesInterfaceActive = False):
 		# Parameters
 		self.height = height
 		self.width = width
 		self.y = y
 		self.x = x
-		self.win = parent.subwin(self.height, self.width, self.y, self.x)
-		self.win.box()
-		# UI details
-		self.vOffset = 2
-		self.hOffset = 2
+		self.cursesInterfaceActive = cursesInterfaceActive
+		if self.cursesInterfaceActive:
+			self.win = parent.subwin(self.height, self.width, self.y, self.x)
+			self.win.box()
+			# UI details
+			self.vOffset = 2
+			self.hOffset = 2
 		# Usability parameters
 		self.highlightDuration = 0.3 # seconds
 
 		self.onPlayPause = False
 		self.onStartRadio= False
 		
-		self.drawWindow()
+		if self.cursesInterfaceActive:
+			self.drawWindow()
 
 	def drawPlayPause(self):
-		self.win.addstr(self.vPosPlayPause, self.hPosPlayPause, "Play/Pause", curses.A_STANDOUT if self.onPlayPause else curses.A_NORMAL)
+		if self.cursesInterfaceActive:
+			self.win.addstr(self.vPosPlayPause, self.hPosPlayPause, "Play/Pause", curses.A_STANDOUT if self.onPlayPause else curses.A_NORMAL)
 
 	def drawStartRadio(self):
-		self.win.addstr(self.vPosStartRadio, self.hPosStartRadio, "Start Radio", curses.A_STANDOUT if self.onStartRadio else curses.A_NORMAL)
+		if self.cursesInterfaceActive:
+			self.win.addstr(self.vPosStartRadio, self.hPosStartRadio, "Start Radio", curses.A_STANDOUT if self.onStartRadio else curses.A_NORMAL)
 
 	def drawWindow(self):
+		if not self.cursesInterfaceActive:
+			return
+		
 		vPos = 0
 
 		vPos += self.vOffset
@@ -227,26 +329,115 @@ class globalControls:
 		self.onPlayPause = not self.onPlayPause
 
 		self.drawPlayPause()
-		self.win.refresh()
+		if self.cursesInterfaceActive:
+			self.win.refresh()
 		
 		if self.onPlayPause:
 			time.sleep(self.highlightDuration)
 			self.onPlayPause = False
-			self.drawPlayPause()
-			self.win.refresh()
+			if self.cursesInterfaceActive:
+				self.drawPlayPause()
+				self.win.refresh()
 		
 	def pressStartRadio(self):
 		self.onStartRadio = not self.onStartRadio
 
-		self.drawStartRadio()
-		self.win.refresh()
+		if self.cursesInterfaceActive:
+			self.drawStartRadio()
+			self.win.refresh()
 		
 		if self.onStartRadio:
 			time.sleep(self.highlightDuration)
 			self.onStartRadio = False
-			self.drawStartRadio()
-			self.win.refresh()
+			if self.cursesInterfaceActive:
+				self.drawStartRadio()
+				self.win.refresh()
+	
+       
+def getch():
+	"""Gets a single character from standard input.  Does not echo to the
+screen."""
+	import sys, tty, termios
+	old_settings = termios.tcgetattr(0)
+	new_settings = old_settings[:]
+	new_settings[3] &= ~termios.ICANON
+	try:
+		termios.tcsetattr(0, termios.TCSANOW, new_settings)
+		ch = sys.stdin.read(1)
+	finally:
+		termios.tcsetattr(0, termios.TCSANOW, old_settings)
+	return ch
+
+def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
+	# Loop over time, waiting for key presses to be converted into actions
+	map = {
+		'a': ('Group', 'mute'),
+		'b': ('Kitchen', 'mute'),
+		'c': ('Living Room', 'mute'),
+		'd': ('Office', 'mute'),
+		'e': ('Bathroom', 'mute'),
+		'f': ('Bedroom', 'mute'),
+# 		'?': ('Group', 'group'),
+		'g': ('Kitchen', 'group'),
+		'h': ('Living Room', 'group'),
+		'i': ('Office', 'group'),
+		'j': ('Bathroom', 'group'),
+		'k': ('Bedroom', 'group'),
+		'l': ('Group', 'incrVol'),
+		'm': ('Kitchen', 'incrVol'),
+		'n': ('Living Room', 'incrVol'),
+		'o': ('Office', 'incrVol'),
+		'p': ('Bathroom', 'incrVol'),
+		'q': ('Bedroom', 'incrVol'),
+		'r': ('Group', 'decrVol'),
+		's': ('Kitchen', 'decrVol'),
+		't': ('Living Room', 'decrVol'),
+		'u': ('Office', 'decrVol'),
+		'v': ('Bathroom', 'decrVol'),
+		'w': ('Bedroom', 'decrVol')
+		}
+	DBG = True
+	
+	while True:
+# 		k = raw_input()
+		k = getch()
+				
+		if DBG:
+			print("key pressed: ", k)
 		
+		sendChanges = False
+		if (k == 'Q'):
+			break
+		
+		try:
+			for code, action in map.iteritems():
+				if k == code:
+					if DBG:
+						print("Executing action %s for zone %s" % (action[1], action[0]))
+					zone = zones[action[0]]
+					if action[1] == 'mute':
+						zone.toggleMute()
+						sendChanges = True
+					if action[1] == 'group':
+						zone.toggleInGroup()
+						sendChanges = True
+					if action[1] == 'incrVol':
+						zone.incrVolume()
+						sendChanges = True
+					if action[1] == 'decrVol':
+						zone.decrVolume()
+						sendChanges = True
+					break
+		except:
+			raise
+		
+		if sendChanges:
+			with sleeperChange:
+				sleeperChange.notifyAll()
+
+
+       
+       
 def interface(stdscr, hOffset, zones, activeZoneName, globCtrls, sleeperChange, DBG):
 	# Loop over time, waiting for key presses to trigger actions
 	while True:
@@ -379,7 +570,7 @@ class readSonosValues(threading.Thread):
 					volume = speakers[zoneName].volume
 					if volume != origVolume:
 						zone.volume = volume
-						zone.drawVolume()
+						zone.drawVolume(origVolume)
 						refreshZone = True
 					if zone.inGroup:
 						logging.debug("Calculating total volume in group zone; zone = %s (zone.volume = %f)", zoneName, zone.volume)
@@ -402,7 +593,7 @@ class readSonosValues(threading.Thread):
 					raise
 				
 				if refreshZone:
-					zone.win.refresh()
+					zone.refresh()
 					groupChanges = True
 					
 			#for zoneName, zone in zones.items():
@@ -421,15 +612,16 @@ class readSonosValues(threading.Thread):
 					logging.debug("groupVolume = %f", groupVolume)
 					groupVolume = float(groupVolume)/float(groupNbZones)
 					logging.debug("zone.volume = %f", zone.volume)
+					origVolume = zone.volume
 					zone.volume = int(groupVolume)
 					logging.debug("zone.volume = %f", zone.volume)
-					zone.drawVolume()
+					zone.drawVolume(origVolume)
 					
 					logging.debug("groupNbMute = %d", groupNbMute)
 					zone.mute = groupNbMute == groupNbZones
 					zone.drawMute()
 				
-				zone.win.refresh()
+				zone.refresh()
 	
 	# 		time.sleep(5)
 #  			time.sleep(1)
@@ -542,7 +734,7 @@ class changeSonosValues(threading.Thread):
 				self.sleeperChange.wait(timeout = 5)
 
 
-def sonosInterface(stdscr):
+def sonosInterface(stdscr, cursesInterfaceActive = True):
 	# Configure logging
 	try:
 		os.remove('sonosInterface.log')
@@ -564,15 +756,19 @@ def sonosInterface(stdscr):
 	vPos = vOffset
 	hPos = hOffset
 	# Default volume to display
-	volume = 50
+	volume = 0
+	# Select an interface: Curses or Text
+	textInterfaceActive = True
+	if cursesInterfaceActive:
+		textInterfaceActive = False
 
-	# Clear screen
-	stdscr.clear()
-	# Do no display the blinking cursor
-	curses.curs_set(0)
+		# Clear screen
+		stdscr.clear()
+		# Do no display the blinking cursor
+		curses.curs_set(0)
 
-	# Display the application title on the first line
-	stdscr.addstr(0, hOffset, title, curses.A_UNDERLINE)
+		# Display the application title on the first line
+		stdscr.addstr(0, hOffset, title, curses.A_UNDERLINE)
 
 	# Create a zone for each zone, plus a group zone
 	zoneNames = ["Group", "Kitchen", "Living Room", "Office", "Bathroom", "Bedroom"]
@@ -582,7 +778,7 @@ def sonosInterface(stdscr):
 	for zoneName in zoneNames:
 		# Hide the "In group" parameter for the group zone
 		inGroupEnabled = True if zoneName != "Group" else False
-		zones[zoneName] = zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False, inGroupEnabled)
+		zones[zoneName] = zone(stdscr, zoneName, height, width, vPos, hPos, volume, False, False, inGroupEnabled, cursesInterfaceActive)
 		
 		prevZoneNameIndex = zoneNameIndex - 1
 		nextZoneNameIndex = zoneNameIndex + 1 if zoneNameIndex < len(zoneNames) - 1 else zoneNameIndex + 1 - len(zoneNames)
@@ -601,9 +797,10 @@ def sonosInterface(stdscr):
 	globCtrlsHeight = 8
 	globCtrlsWidth = 50
 
-	globCtrls = globalControls(stdscr, globCtrlsHeight, globCtrlsWidth, globCtrlsvOffset, globCtrlshOffset)
+	globCtrls = globalControls(stdscr, globCtrlsHeight, globCtrlsWidth, globCtrlsvOffset, globCtrlshOffset, cursesInterfaceActive)
 
-	stdscr.refresh()
+	if cursesInterfaceActive:
+		stdscr.refresh()
 
  	
  	# Prepare info about sonos speakers
@@ -638,8 +835,12 @@ def sonosInterface(stdscr):
  	changeSonosValuesThread.start()
 
 	try:
-		logging.debug("Starting curses interface")
-		interface(stdscr, hOffset, zones, activeZoneName, globCtrls, sleeperChange, DBG)
+		if cursesInterfaceActive:
+			logging.debug("Starting curses interface")
+			interface(stdscr, hOffset, zones, activeZoneName, globCtrls, sleeperChange, DBG)
+		if textInterfaceActive:
+			logging.debug("Starting text interface")
+			textInterface(zones, activeZoneName, globCtrls, sleeperChange)
 	except:
 		pass
 	finally:
@@ -653,5 +854,13 @@ def sonosInterface(stdscr):
 
 
 if __name__ == '__main__':
-	# Start the curses application
-	curses.wrapper(sonosInterface)
+	
+	cursesInterfaceActive = False
+	
+	if cursesInterfaceActive:
+		# Start the curses application
+		curses.wrapper(sonosInterface)
+	else:
+		# Start the text-based interface
+		dummy = 0
+		sonosInterface(dummy, False)
