@@ -53,35 +53,27 @@ class zone:
 # 			}
 		map = {
 			'Mute': {
-					'Group': 'a', 
-					'Kitchen': 'b',
-					'Living Room': 'c',
-					'Office': 'd',
-					'Bathroom': 'e',
-					'Bedroom': 'f'
+					'Group': 'l48', 
+					'Kitchen': 'l49',
+					'Living Room': 'l50',
+					'Office': 'l51',
+					'Bathroom': 'l52',
+					'Bedroom': 'l53'
 		},
 			'InGroup': {
-					'Kitchen': 'g',
-					'Living Room': 'h',
-					'Office': 'i',
-					'Bathroom': 'j',
-					'Bedroom': 'k'
+					'Kitchen': 'l55',
+					'Living Room': 'l56',
+					'Office': 'l57',
+					'Bathroom': 'l58',
+					'Bedroom': 'l59'
 		},
-			'IncrVol': {
-					'Group': 'l', 
-					'Kitchen': 'm',
-					'Living Room': 'n',
-					'Office': 'o',
-					'Bathroom': 'p',
-					'Bedroom': 'q'
-		},
-			'DecrVol': {
-					'Group': 'r', 
-					'Kitchen': 's',
-					'Living Room': 't',
-					'Office': 'u',
-					'Bathroom': 'v',
-					'Bedroom': 'w'
+			'Volume': {
+					'Group': 'd0', 
+					'Kitchen': 'd1',
+					'Living Room': 'd2',
+					'Office': 'd3',
+					'Bathroom': 'd4',
+					'Bedroom': 'd5'
 		},
 			}
 			
@@ -90,18 +82,12 @@ class zone:
 			return
 		
 		try:
-			codes = ""
-			count = 1
+			# Treat state according to item kind
 			if item == "Volume":
-				count = self.volume - oldValue
-				print("Vol: %d OrigVol: %d count: %d" % (self.volume, oldValue, count))
-				if count >= 0:
-					item = 'IncrVol'
-				else:
-					count *= -1
-					item = 'DecrVol'
-			for i in range(count):
-				codes += map[item][self.zoneName]
+				suffix = str(int(value*255./100.)).zfill(3)
+			else:
+				suffix = str(1 if value else 0)
+			codes = map[item][self.zoneName] + suffix
 		except:
 			codes = "?"
 			
@@ -371,36 +357,36 @@ screen."""
 def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 	# Loop over time, waiting for key presses to be converted into actions
 	map = {
-		'a': ('Group', 'mute'),
-		'b': ('Kitchen', 'mute'),
-		'c': ('Living Room', 'mute'),
-		'd': ('Office', 'mute'),
-		'e': ('Bathroom', 'mute'),
-		'f': ('Bedroom', 'mute'),
-# 		'?': ('Group', 'group'),
-		'g': ('Kitchen', 'group'),
-		'h': ('Living Room', 'group'),
-		'i': ('Office', 'group'),
-		'j': ('Bathroom', 'group'),
-		'k': ('Bedroom', 'group'),
-		'l': ('Group', 'incrVol'),
-		'm': ('Kitchen', 'incrVol'),
-		'n': ('Living Room', 'incrVol'),
-		'o': ('Office', 'incrVol'),
-		'p': ('Bathroom', 'incrVol'),
-		'q': ('Bedroom', 'incrVol'),
-		'r': ('Group', 'decrVol'),
-		's': ('Kitchen', 'decrVol'),
-		't': ('Living Room', 'decrVol'),
-		'u': ('Office', 'decrVol'),
-		'v': ('Bathroom', 'decrVol'),
-		'w': ('Bedroom', 'decrVol')
+		'19': ('Group', 'Mute'),
+		'23': ('Kitchen', 'Mute'),
+		'27': ('Living Room', 'Mute'),
+		'31': ('Office', 'Mute'),
+		'35': ('Bathroom', 'Mute'),
+		'f': ('Bedroom', 'Mute'),
+# 		'?': ('Group', 'inGroup'),
+		'21': ('Kitchen', 'inGroup'),
+		'25': ('Living Room', 'inGroup'),
+		'29': ('Office', 'inGroup'),
+		'33': ('Bathroom', 'inGroup'),
+		'37': ('Bedroom', 'inGroup'), # Additional switches: 41, 43, 45, 47
+		'0': ('Group', 'incrVol'),
+		'2': ('Kitchen', 'incrVol'),
+		'4': ('Living Room', 'incrVol'),
+		'6': ('Office', 'incrVol'),
+		'8': ('Bathroom', 'incrVol'),
+		'10': ('Bedroom', 'incrVol'),
+		'1': ('Group', 'decrVol'),
+		'3': ('Kitchen', 'decrVol'),
+		'5': ('Living Room', 'decrVol'),
+		'7': ('Office', 'decrVol'),
+		'9': ('Bathroom', 'decrVol'),
+		'11': ('Bedroom', 'decrVol')
 		}
 	DBG = True
 	
 	while True:
-# 		k = raw_input()
-		k = getch()
+		k = raw_input()
+# 		k = getch()
 				
 		if DBG:
 			print("key pressed: ", k)
