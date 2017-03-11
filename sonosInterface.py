@@ -8,6 +8,8 @@ import os
 
 from __builtin__ import True
 
+fo1=open("/tmp/c2s_fifo_2", "w")
+			
 class zone:
 	def __init__ (self, parent, zoneName, height, width, y, x, volume, inGroup, mute, inGroupEnabled = True, cursesInterfaceActive = False):
 		# Parameters
@@ -44,8 +46,7 @@ class zone:
 
 		if self.cursesInterfaceActive:
 			self.drawWindow()
-		else:
-			self.fo1=open("/tmp/c2s_fifo_2", "w")
+
 
 	def printChanges(self, item, value, oldValue = 0):
 		DBG = False
@@ -98,8 +99,8 @@ class zone:
 		else:
 			print codes
 			#str = input("Message ?")
-			self.fo1.write(codes)
-			self.fo1.flush()
+			fo1.write(codes)
+			fo1.flush()
 			
 		
 	def refresh(self):
