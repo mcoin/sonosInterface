@@ -46,7 +46,7 @@ class zone:
 			self.drawWindow()
 
 	def printChanges(self, item, value, oldValue = 0):
-		DBG = True
+		DBG = False
 # 		map = {
 # 			'Group': {'Mute': 'a', 'InGroup': 'b'},
 # 			'Kitchen': {'Mute': 'c', 'InGroup': 'd'}
@@ -167,7 +167,7 @@ class zone:
 			self.triggerToggleInGroup = not self.triggerToggleInGroup
 
 	def toggleMute(self):
-		print("zone - toggleMute")
+		#print("zone - toggleMute")
 		if not self.enabled:
 			return
 
@@ -357,12 +357,12 @@ screen."""
 def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 	# Loop over time, waiting for key presses to be converted into actions
 	map = {
-		'19': ('Group', 'Mute'),
-		'23': ('Kitchen', 'Mute'),
-		'27': ('Living Room', 'Mute'),
-		'31': ('Office', 'Mute'),
-		'35': ('Bathroom', 'Mute'),
-		'f': ('Bedroom', 'Mute'),
+		'19': ('Group', 'mute'),
+		'23': ('Kitchen', 'mute'),
+		'27': ('Living Room', 'mute'),
+		'31': ('Office', 'mute'),
+		'35': ('Bathroom', 'mute'),
+		'f': ('Bedroom', 'mute'),
 # 		'?': ('Group', 'inGroup'),
 		'21': ('Kitchen', 'inGroup'),
 		'25': ('Living Room', 'inGroup'),
@@ -382,7 +382,7 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 		'9': ('Bathroom', 'decrVol'),
 		'11': ('Bedroom', 'decrVol')
 		}
-	DBG = True
+	DBG = False
 	
 	while True:
 		k = raw_input()
