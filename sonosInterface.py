@@ -44,6 +44,8 @@ class zone:
 
 		if self.cursesInterfaceActive:
 			self.drawWindow()
+		else:
+			self.fo1=open("/tmp/c2s_fifo_2", "w")
 
 	def printChanges(self, item, value, oldValue = 0):
 		DBG = False
@@ -95,6 +97,10 @@ class zone:
 			print("Zone name: %s - %s: %d [codes: '%s']" % (self.zoneName, item, value, codes))
 		else:
 			print codes
+			#str = input("Message ?")
+			self.fo1.write(codes)
+			self.fo1.flush()
+			
 		
 	def refresh(self):
 		if self.cursesInterfaceActive:
