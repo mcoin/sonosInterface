@@ -47,7 +47,7 @@ class zone:
 
 
 	def printChanges(self, item, value, oldValue = 0):
-		DBG = True
+		DBG = False
 # 		map = {
 # 			'Group': {'Mute': 'a', 'InGroup': 'b'},
 # 			'Kitchen': {'Mute': 'c', 'InGroup': 'd'}
@@ -387,7 +387,7 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 		'9': ('Bathroom', 'decrVol'),
 		'11': ('Bedroom', 'decrVol')
 		}
-	DBG = True
+	DBG = False
 	
 	while True:
 		k = raw_input()
