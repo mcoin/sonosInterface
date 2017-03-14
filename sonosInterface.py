@@ -29,7 +29,7 @@ class zone:
 		self.vOffset = 2
 		self.hOffset = 2
 		# Usability parameters
-		self.volDelta = 5
+		self.volDelta = 2
 		self.minVolume = 0
 		self.maxVolume = 100
 		self.inGroupEnabled = inGroupEnabled
@@ -47,7 +47,7 @@ class zone:
 
 
 	def printChanges(self, item, value, oldValue = 0):
-		DBG = False
+		DBG = True
 # 		map = {
 # 			'Group': {'Mute': 'a', 'InGroup': 'b'},
 # 			'Kitchen': {'Mute': 'c', 'InGroup': 'd'}
@@ -367,8 +367,8 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 		'27': ('Living Room', 'mute'),
 		'31': ('Office', 'mute'),
 		'35': ('Bathroom', 'mute'),
-		'f': ('Bedroom', 'mute'),
-# 		'?': ('Group', 'inGroup'),
+		'39': ('Bedroom', 'mute'),
+# 		'?': ('Group', 'inGroup'), # No inGroup property for zone 'Group'
 		'21': ('Kitchen', 'inGroup'),
 		'25': ('Living Room', 'inGroup'),
 		'29': ('Office', 'inGroup'),
@@ -387,7 +387,7 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 		'9': ('Bathroom', 'decrVol'),
 		'11': ('Bedroom', 'decrVol')
 		}
-	DBG = False
+	DBG = True
 	
 	while True:
 		k = raw_input()
@@ -397,7 +397,7 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 			print("key pressed: ", k)
 		
 		sendChanges = False
-		if (k == 'Q'):
+		if (k == 'q' or k == 'exit'):
 			break
 		
 		try:
@@ -520,14 +520,25 @@ class readSonosValues(threading.Thread):
 		speakers = self.speakers
 		zones = self.zones
 		
+		# Interval (in s) after which all values are transmitted again
+		# (in order to avoid drift)
+		refreshAllInterval = 30
+		lastRefreshAll = time.time()
+		
 		while not self.stopper.is_set():
 			groupVolume = 0
 			groupNbZones = 0
 			groupNbMute = 0
 			groupChanges = False
+			drawAll = False
 			if init:
 				groupChanges = True
 				init = False
+				drawAll = True
+			now = time.time()
+			if now >= lastRefreshAll + refreshAllInterval:
+				drawAll = True
+				lastRefreshAll = now
 			groupDef = None
 			try:
 				groupDef = speakers['Kitchen'].group.members
@@ -543,11 +554,12 @@ class readSonosValues(threading.Thread):
 				
 				refreshZone = False
 	
+				# InGroup
 				try:
 					origInGroup = zone.inGroup
 					inGroup = len(groupDef) > 1 and speakers[zoneName] in groupDef
 					logging.debug("  zone: %s", zoneName)
-					if inGroup != origInGroup:
+					if inGroup != origInGroup or drawAll:
 						zone.inGroup = inGroup
 						zone.drawInGroup()
 						refreshZone = True
@@ -556,10 +568,11 @@ class readSonosValues(threading.Thread):
 				except:
 					raise
 	
+				# Volume
 				try:
 					origVolume = zone.volume
 					volume = speakers[zoneName].volume
-					if volume != origVolume:
+					if volume != origVolume or drawAll:
 						zone.volume = volume
 						zone.drawVolume(origVolume)
 						refreshZone = True
@@ -571,10 +584,11 @@ class readSonosValues(threading.Thread):
 				except:
 					raise
 				
+				# Mute
 				try:
 					origMute = zone.mute
 					mute = speakers[zoneName].mute
-					if mute != origMute:
+					if mute != origMute or drawAll:
 						zone.mute = mute
 						zone.drawMute()
 						refreshZone = True
