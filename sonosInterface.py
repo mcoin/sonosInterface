@@ -6,10 +6,8 @@ import soco
 import logging
 import os
 
-from __builtin__ import True
+#from __builtin__ import True
 
-fo1=open("/tmp/c2s_fifo_2", "w")
-			
 class zone:
 	def __init__ (self, parent, zoneName, height, width, y, x, volume, inGroup, mute, inGroupEnabled = True, cursesInterfaceActive = False):
 		# Parameters
@@ -98,9 +96,9 @@ class zone:
 			print("Zone name: %s - %s: %d [codes: '%s']" % (self.zoneName, item, value, codes))
 		else:
 			print codes
-			#str = input("Message ?")
-			fo1.write(codes)
-			fo1.flush()
+			##str = input("Message ?")
+			#fo1.write(codes)
+			#fo1.flush()
 			
 		
 	def refresh(self):
@@ -599,8 +597,9 @@ class readSonosValues(threading.Thread):
 	  				zone.disableZone()
 	 			elif groupNbZones > 0 and not zone.enabled:
 	 				zone.enableZone()
-				
+
 				logging.debug("groupNbZones = %d", groupNbZones)
+
 				if groupNbZones > 0:
 					logging.debug("groupVolume = %f", groupVolume)
 					groupVolume = float(groupVolume)/float(groupNbZones)
@@ -848,6 +847,10 @@ def sonosInterface(stdscr, cursesInterfaceActive = True):
 
 if __name__ == '__main__':
 	
+	#fo1=open("/tmp/c2s_fifo_2", "w")
+	#fo1.write("l601")
+	#fo1.flush()
+			
 	cursesInterfaceActive = False
 	
 	if cursesInterfaceActive:
