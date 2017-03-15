@@ -95,7 +95,7 @@ class zone:
 		if DBG:
 			print("Zone name: %s - %s: %d [codes: '%s']" % (self.zoneName, item, value, codes))
 		else:
-			print codes
+			print(codes + "\n")
 			##str = input("Message ?")
 			#fo1.write(codes)
 			#fo1.flush()
@@ -379,13 +379,13 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 		'4': ('Living Room', 'incrVol'),
 		'6': ('Office', 'incrVol'),
 		'8': ('Bathroom', 'incrVol'),
-		'10': ('Bedroom', 'incrVol'),
+		'10': ('Bedroom', 'decrVol'), # Reversed on circuit: Swap incrVol/decrVol
 		'1': ('Group', 'decrVol'),
 		'3': ('Kitchen', 'decrVol'),
 		'5': ('Living Room', 'decrVol'),
 		'7': ('Office', 'decrVol'),
 		'9': ('Bathroom', 'decrVol'),
-		'11': ('Bedroom', 'decrVol')
+		'11': ('Bedroom', 'incrVol') # Reversed on circuit: Swap incrVol/decrVol
 		}
 	DBG = False
 	
