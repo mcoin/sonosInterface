@@ -5,6 +5,7 @@ from collections import OrderedDict
 import soco
 import logging
 import os
+import sys
 
 #from __builtin__ import True
 
@@ -92,6 +93,7 @@ class zone:
 		except:
 			codes = "?"
 			
+		sys.stderr.write("Zone name: %s - %s: %d [codes: '%s']\n" % (self.zoneName, item, value, codes))
 		if DBG:
 			print("Zone name: %s - %s: %d [codes: '%s']" % (self.zoneName, item, value, codes))
 		else:
@@ -392,7 +394,8 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 	while True:
 		k = raw_input()
 # 		k = getch()
-				
+		
+		sys.stderr.write("Received code '%s'\n" % (k))		
 		if DBG:
 			print("key pressed: ", k)
 		
@@ -403,6 +406,7 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 		try:
 			for code, action in map.iteritems():
 				if k == code:
+					sys.stderr.write("Executing action %s for zone %s\n" % (action[1], action[0]))
 					if DBG:
 						print("Executing action %s for zone %s" % (action[1], action[0]))
 					zone = zones[action[0]]
