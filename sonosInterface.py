@@ -413,7 +413,7 @@ def textInterface(zones, activeZoneName, globCtrls, sleeperChange):
 					if action[1] == 'mute':
 						zone.toggleMute()
 						sendChanges = True
-					if action[1] == 'group':
+					if action[1] == 'inGroup':
 						zone.toggleInGroup()
 						sendChanges = True
 					if action[1] == 'incrVol':
@@ -673,7 +673,7 @@ class changeSonosValues(threading.Thread):
 						speakers[zoneName].unjoin()
 					else:
 						if zoneName != 'Kitchen':
-							speakers[zoneName].join(speakers['Kitchen'])
+							speakers[zoneName].join(speakers['Kitchen'].group.coordinator)
 						
 					zone.triggerToggleInGroup = False
 					
